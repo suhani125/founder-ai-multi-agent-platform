@@ -1,450 +1,170 @@
-# 🤖 Founder AI — Multi-Agent Startup Operating System
+# Founder AI
 
-> An AI-powered multi-agent platform designed to help startup teams manage customer support, hiring, and feedback workflows through specialized AI agents coordinated by a central orchestrator.
+A small multi-agent project for startup founders. There are three agents (hiring, feedback, support) and an orchestrator that sits on top so you can talk to all of them from one chat box.
 
-## 🚀 Overview
+I built the orchestrator and the hiring agent. The support and feedback agents are my friend Sakshi's work (edit this line if that's not right).
 
-Founder AI is a modular **Multi-Agent AI Platform** where different AI agents handle different startup operations.
+## What's in here
 
-Instead of using one large AI system for everything, the platform separates responsibilities into specialized agents:
+- **Hiring agent**: you upload resumes (PDF) and it scores each candidate on skills, experience, education, projects and culture fit, with a short explanation.
+- **Feedback agent**: you upload customer feedback and it works out sentiment, common complaints, feature requests and topics. There's a dashboard and a chat where you can ask questions about your data.
+- **Support agent**: you upload documents (policies, FAQs) and it answers questions from them. If the documents don't have the answer it can search the web or create a ticket.
+- **Orchestrator**: takes one message in plain English, works out which agent(s) should handle it, calls them, and gives you back one answer.
 
-- 🎧 **Support Agent** — Handles customer/support-related workflows
-- 👥 **Hiring Agent** — Assists with hiring-related workflows
-- 💬 **Feedback Agent** — Processes feedback-related workflows
-- 🧠 **Orchestrator** — Coordinates requests and routes them to the appropriate agent
+Each agent is its own app with its own frontend, backend and database. They don't know about each other. Only the orchestrator talks to all three.
 
-The goal is to provide an AI-powered operating layer for common startup workflows using a modular multi-agent architecture.
+## How it fits together
 
----
-
-## 🏗️ Architecture
-
-```text
-                         ┌──────────────────────┐
-                         │       Frontend       │
-                         │   User Interaction   │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │     Orchestrator     │
-                         │  Request Routing &   │
-                         │  Agent Coordination  │
-                         └──────────┬───────────┘
-                                    │
-                  ┌─────────────────┼─────────────────┐
-                  │                 │                 │
-                  ▼                 ▼                 ▼
-          ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-          │   Support    │  │   Hiring     │  │   Feedback   │
-          │    Agent     │  │    Agent     │  │    Agent     │
-          └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-                 │                 │                 │
-                 └─────────────────┼─────────────────┘
-                                   ▼
-                         ┌──────────────────────┐
-                         │      AI / LLM        │
-                         │  Agent Intelligence  │
-                         └──────────────────────┘
+```
+          orchestrator console (browser)
+                     |
+                     v
+              orchestrator :8000
+            (FastAPI + LangGraph)
+           /         |          \
+          v          v           v
+   hiring :8002  feedback :8001  support :8003
+        |            |             |
+    postgres     postgres+redis  postgres+redis
 ```
 
----
+Each agent also has its own frontend on 3002 (hiring), 3001 (feedback) and 3003 (support), so you can use them without the orchestrator too.
 
-## ✨ Key Features
+## The orchestrator
 
-### 🧠 Multi-Agent Architecture
+This is the part I spent the most time on, so it gets the longest section.
 
-The system uses specialized AI agents for different startup functions instead of relying on one monolithic assistant.
+It's a FastAPI app with no database. When a message comes in at `POST /api/orchestrate`, a LangGraph agent reads it. That agent has a set of tools, and each tool is really just an HTTP call to one of the other agents (for example "list resumes" or "search the knowledge base"). The model decides which tools to call, sometimes more than one in a row, then writes the final answer.
 
-### 🎯 Intelligent Request Routing
+The response looks like this:
 
-The Orchestrator acts as the central coordination layer and routes requests to the appropriate agent.
-
-### 🎧 Support Automation
-
-The Support Agent is designed to handle support-oriented interactions and workflows.
-
-### 👥 Hiring Assistance
-
-The Hiring Agent provides AI-powered assistance for hiring-related tasks.
-
-### 💬 Feedback Processing
-
-The Feedback Agent handles feedback-related workflows and transforms input into useful information.
-
-### 🧩 Modular Design
-
-Each major agent is separated into its own service, making the platform easier to maintain and extend.
-
-### 🐳 Dockerized Setup
-
-The project includes Docker and Docker Compose configuration for running multiple services together.
-
----
-
-# 🛠️ Technology Stack
-
-## Backend
-
-- Python
-- FastAPI
-- REST APIs
-- Pydantic
-
-## AI / LLM
-
-- Groq-compatible LLM integration
-- Multi-Agent Architecture
-- Prompt-based AI workflows
-
-## Frontend
-
-- Next.js
-- React
-- TypeScript
-- HTML / CSS
-
-## Database & Storage
-
-- PostgreSQL
-- Redis
-- ChromaDB
-
-## Infrastructure
-
-- Docker
-- Docker Compose
-
----
-
-# 📁 Project Structure
-
-```text
-founder-ai-runnable/
-│
-├── founder-ai-feedback-agent/
-│   └── backend/
-│       └── Feedback Agent
-│
-├── founder-ai-final/
-│   ├── backend/
-│   │   └── Hiring Agent
-│   └── frontend/
-│
-├── orchestrator/
-│   └── Orchestrator Service
-│
-├── support_agent/
-│   ├── backend/
-│   │   └── Support Agent
-│   └── frontend/
-│
-├── chat_models.py
-├── docker-compose.yml
-├── orchestrator-console.html
-├── .env.example
-└── README.md
+```json
+{
+  "answer": "...",
+  "tools_used": ["hiring_list_resumes", "hiring_analyze"],
+  "thread_id": "..."
+}
 ```
 
----
+Send the same `thread_id` back on your next message and it remembers the conversation.
 
-# 🔄 How It Works
+**Auth.** The three agents each have their own users, so the orchestrator can't just log in for you. Instead you log in to each agent and pass that agent's token in a header:
 
-```text
-User Request
-     │
-     ▼
-  Frontend
-     │
-     ▼
-Orchestrator
-     │
-     ├──────────────► Support Agent
-     │
-     ├──────────────► Hiring Agent
-     │
-     └──────────────► Feedback Agent
-                         │
-                         ▼
-                    AI Processing
-                         │
-                         ▼
-                      Response
-                         │
-                         ▼
-                        User
+- `X-Hiring-Token`
+- `X-Feedback-Token`
+- `X-Support-Token`
+
+The orchestrator forwards the right one when it calls that agent. If you don't send a token for an agent, that agent just isn't available for the request.
+
+**Config** lives in `orchestrator/.env`:
+
+```env
+FEEDBACK_AGENT_URL=http://feedback-backend:8000
+HIRING_AGENT_URL=http://hiring-backend:8000
+SUPPORT_AGENT_URL=http://support-backend:8000
+
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_key_here
+GROQ_MODEL=some-model-your-key-can-use
+SUPERVISOR_MODEL=some-model-your-key-can-use
+
+ALLOWED_ORIGINS=["http://localhost:3000", "http://127.0.0.1:3000"]
 ```
 
-### 1. User Request
-
-The user sends a request through the application interface.
-
-### 2. Orchestrator
-
-The Orchestrator receives the request and coordinates the workflow.
-
-### 3. Agent Selection
-
-The request is routed to the appropriate specialized agent.
-
-### 4. AI Processing
-
-The selected agent processes the request using the configured AI/LLM workflow.
-
-### 5. Response
-
-The final response is returned to the user through the application.
-
----
-
-# ⚙️ Getting Started
-
-## Prerequisites
-
-Make sure you have:
-
-- Python
-- Docker Desktop
-- Docker Compose
-- Node.js
-- Git
-
-installed on your system.
-
----
-
-## 1. Clone the Repository
-
-```bash
-git clone https://github.com/sakshiagra1903/founder-ai-multi-agent-platform.git
-```
-
-Move into the project:
-
-```bash
-cd founder-ai-multi-agent-platform
-```
-
----
-
-## 2. Configure Environment Variables
-
-The repository contains `.env.example` files as configuration templates.
-
-Create your local `.env` file from the example:
-
-### Windows PowerShell
+Model names get retired by the provider every so often. If you suddenly get `model_not_found`, ask Groq which models your key can use and change the two model lines:
 
 ```powershell
-Copy-Item .env.example .env
+Invoke-RestMethod -Uri "https://api.groq.com/openai/v1/models" -Headers @{ Authorization = "Bearer $env:GROQ_API_KEY" }
 ```
 
-Then add your own API credentials.
+There's also a small test page, `orchestrator-console.html`. Log in to the agents in the sidebar and chat. Serve it from an address that's in `ALLOWED_ORIGINS`:
 
-Example:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
+```
+python -m http.server 3000
 ```
 
-> ⚠️ Never commit real API keys or `.env` files to GitHub.
+then open http://127.0.0.1:3000/orchestrator-console.html.
 
----
+## The hiring agent
 
-# 🐳 Running with Docker
+You upload PDF resumes and the backend pulls the text out with PyMuPDF. Then a small LangGraph pipeline goes through each resume: one step pulls out skills and experience, a second step combines everything into scores and a recommendation. It uses a ChromaDB collection of hiring rubrics for context.
 
-Make sure Docker Desktop is running.
+Endpoints: `POST /auth/signup`, `POST /auth/login`, `POST /hiring/upload-resumes`, `GET /hiring/resumes`, `POST /hiring/analyze`.
 
-### Build the services
+Stack: FastAPI, SQLAlchemy, PostgreSQL, PyMuPDF, LangChain/LangGraph, ChromaDB, Next.js.
 
-```bash
-docker compose build
+## Tech used
+
+Python, FastAPI, SQLAlchemy, PostgreSQL, Redis, LangChain, LangGraph, Groq, ChromaDB, FAISS, Next.js, Docker Compose.
+
+## Folder layout
+
+```
+founder-ai-feedback-agent/   feedback agent
+founder-ai-final/            hiring agent
+support_agent/               support agent
+orchestrator/                orchestrator
+orchestrator-console.html    test page for the orchestrator
+docker-compose.yml
 ```
 
-### Start the application
+## Running it
 
-```bash
-docker compose up
+You need Docker Desktop, Git and a Groq API key.
+
+1. Clone the repo.
+
+2. Every service has its own `.env.example`. Copy each one to `.env` and put your key in:
+
+```
+founder-ai-feedback-agent/backend/.env.example
+founder-ai-final/backend/.env.example
+support_agent/.env.example
+orchestrator/.env.example
 ```
 
-### Run in background
+3. From the folder with `docker-compose.yml`:
 
-```bash
-docker compose up -d
+```
+docker compose up --build
 ```
 
-### Stop the application
+The first build takes a while because of the ML libraries.
 
-```bash
-docker compose down
-```
+Ports:
 
-### Rebuild from scratch
-
-```bash
-docker compose build --no-cache
-docker compose up
-```
-
----
-
-# 🔐 Environment Variables
-
-Sensitive credentials should be stored locally.
-
-The repository only contains example configuration files.
-
-Example:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-**Do not upload your real API key to GitHub.**
-
----
-
-# 🧪 Development Workflow
-
-A typical development workflow is:
-
-```text
-Modify Agent
-     │
-     ▼
-Run Service
-     │
-     ▼
-Test API
-     │
-     ▼
-Test Frontend
-     │
-     ▼
-Test Through Orchestrator
-```
-
-Each agent can be developed and tested independently while the Orchestrator provides the central coordination layer.
-
----
-
-# 📌 Available Agents
-
-| Agent | Responsibility |
+| Service | Port |
 |---|---|
-| 🧠 Orchestrator | Coordinates and routes requests |
-| 🎧 Support Agent | Support-related workflows |
-| 👥 Hiring Agent | Hiring-related workflows |
-| 💬 Feedback Agent | Feedback-related workflows |
+| Orchestrator | 8000 |
+| Feedback backend / frontend | 8001 / 3001 |
+| Hiring backend / frontend | 8002 / 3002 |
+| Support backend / frontend | 8003 / 3003 |
 
----
+The login route is different for each agent, which tripped me up for a while:
 
-# 🔮 Future Improvements
+- hiring: `/auth/login`
+- feedback: `/api/v1/auth/login`
+- support: `/api/auth/login`
 
-The architecture can be extended with additional specialized agents:
+## Things that went wrong (and might go wrong for you)
 
-- 📅 Meeting Agent
-- 📊 Analytics Agent
-- 📢 Marketing Agent
-- 💰 Finance Agent
-- 📋 Task Management Agent
-- 📧 Email Agent
-- 📄 Document Processing Agent
+- **"Failed to fetch" in the browser.** Usually the backend's CORS list doesn't include the page you're on. But a backend that crashes with a 500 shows up as the same error in the browser, so check `docker compose logs <service>` before changing CORS.
+- **Changed a `.env` and nothing happened.** `docker compose restart` doesn't reload `.env`. Use `docker compose up -d <service>`.
+- **`model_not_found`.** See the note about model names above.
+- **Resumes show "no such file" after a rebuild.** The uploads folder isn't a persistent volume yet, so rebuilding the container wipes the files.
+- **`ERR_CONNECTION_REFUSED`.** Docker Desktop or the container isn't running.
 
-Potential future improvements include:
+## Things I'd still like to do
 
-- Agent memory
-- Advanced RAG pipelines
-- Role-Based Access Control
-- Authentication and authorization
-- Agent monitoring and observability
-- Agent evaluation
-- Human-in-the-loop workflows
-- Cloud deployment
-- Production-grade logging
+- One login for everything instead of signing in to each agent
+- Persistent volumes for uploads
+- Tests
+- Better logging
+- More agents later (meetings, finance, email)
 
----
+## Credits
 
-# 🎯 Why Multi-Agent AI?
+- Orchestrator and hiring agent: Suhani ([@suhani125](https://github.com/suhani125))
+- Support and feedback agents: Sakshi Agrawal ([@sakshiagra1903](https://github.com/sakshiagra1903))
 
-Startups have many different repetitive workflows.
-
-A multi-agent architecture allows each AI agent to specialize in a particular business function.
-
-```text
-                    Founder AI
-                        │
-                        ▼
-                  Orchestrator
-                        │
-          ┌─────────────┼─────────────┐
-          ▼             ▼             ▼
-       Support        Hiring       Feedback
-        Agent          Agent         Agent
-```
-
-This approach makes the platform:
-
-- Modular
-- Extensible
-- Easier to maintain
-- Easier to test
-- Easier to expand with new agents
-
----
-
-# 📊 Project Highlights
-
-### Architecture
-
-- Multi-Agent System
-- Central Orchestration Layer
-- Modular Agent Services
-- Service-based architecture
-
-### AI
-
-- LLM-powered workflows
-- Specialized AI agents
-- Prompt-based task processing
-
-### Software Engineering
-
-- REST APIs
-- Dockerized services
-- Frontend/backend separation
-- Environment-based configuration
-- Modular project structure
-
----
-
-# 👩‍💻 Author
-
-## Sakshi Agrawal
-
-**B.Tech — Artificial Intelligence & Machine Learning**
-
-### GitHub
-
-https://github.com/sakshiagra1903
-
-
----
-
-# ⭐ Support
-
-If you find this project useful, consider giving the repository a ⭐ on GitHub.
-
----
-
-# 📜 License
-
-This project is intended for educational, development, and demonstration purposes.
-## 🎥 Project Demo
-
-A complete demonstration of the Founder AI Multi-Agent Platform.
-
-> The demo showcases the multi-agent architecture, orchestrator, and specialized Support, Hiring, and Feedback agents.
-
-🎬 **Project Demo Video:**  
-[Watch the Founder AI Demo](./WhatsApp%20Video%202026-10-04%20at%208.55.35%20PM.mp4)
+Built for learning and demo purposes.
